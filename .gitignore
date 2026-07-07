@@ -1,0 +1,32 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Environment & secrets
+.env
+*.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project-specific
+pdf-rag-copilot/data/*
+pdf-rag-copilot/extracted_images/*
+pdf-rag-copilot/vector_store/*
+
+# Python version
+.python-version

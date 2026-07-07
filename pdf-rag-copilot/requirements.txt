@@ -1,0 +1,12 @@
+langchain
+langchain-chroma
+langchain-openai
+langchain-text-splitters
+langchain-core
+langchain-classic
+docling
+dashscope
+python-dotenv
+streamlit
+sentence-transformers
+numpy
