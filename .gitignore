@@ -27,6 +27,7 @@ Thumbs.db
 pdf-rag-copilot/data/*
 pdf-rag-copilot/extracted_images/*
 pdf-rag-copilot/vector_store/*
+pdf-rag-copilot/conversations/*
 
 # Python version
 .python-version

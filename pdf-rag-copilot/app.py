@@ -59,6 +59,14 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
+# ── 上传限制 ──────────────────────────────────────────
+MAX_FILE_SIZE_MB = 20
+MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
+ALLOWED_EXTENSIONS = {".pdf", ".docx", ".pptx", ".xlsx", ".html", ".htm", ".md", ".txt", ".png", ".jpg", ".jpeg"}
+
+# ── 会话记忆 ──────────────────────────────────────────
+SESSION_ID = "default"
+
 # ── 初始化 Session State ──────────────────────────────
 def _vector_store_exists() -> bool:
     d = Path("vector_store")
@@ -151,6 +159,22 @@ with st.sidebar:
         if not api_key:
             st.error("请先填写 API Key")
         else:
+            # ── 文件校验 ──
+            invalid_size = []
+            invalid_fmt = []
+            for file in uploaded_files:
+                ext = Path(file.name).suffix.lower()
+                if ext not in ALLOWED_EXTENSIONS:
+                    invalid_fmt.append(f"{file.name}（{ext}）")
+                elif file.size > MAX_FILE_SIZE_BYTES:
+                    invalid_size.append(f"{file.name}（{file.size / 1024 / 1024:.1f}MB）")
+            if invalid_fmt:
+                st.error(f"不支持的文件格式: {', '.join(invalid_fmt)}")
+                st.stop()
+            if invalid_size:
+                st.error(f"文件超过 {MAX_FILE_SIZE_MB}MB 限制: {', '.join(invalid_size)}")
+                st.stop()
+
             all_chunks = []
             progress = st.progress(0, text="正在解析...")
             file_names = []
@@ -170,6 +194,9 @@ with st.sidebar:
             progress.progress(0.9, text="正在构建向量库...")
             from src.database import create_vector_store
             create_vector_store(all_chunks)
+
+            # ── 清理临时文件（原始上传文件已解析完毕，可删除）──
+            shutil.rmtree("data", ignore_errors=True)
 
             st.session_state.vector_store_ready = True
             st.session_state.chunk_count = len(all_chunks)
@@ -403,6 +430,8 @@ action_col1, action_col2, action_col3 = st.columns([1, 1, 6])
 with action_col1:
     if st.session_state.messages and st.button("🗑️ 清空对话", use_container_width=True):
         st.session_state.messages = []
+        from src.memory import clear_messages
+        clear_messages(SESSION_ID)
         st.rerun()
 with action_col2:
     if st.session_state.messages and st.button("📥 导出对话", use_container_width=True):
@@ -426,7 +455,8 @@ if question := st.chat_input(placeholder, disabled=not st.session_state.vector_s
     with st.chat_message("assistant"):
         with st.spinner("🤔 正在检索和分析..."):
             from src.database import load_vector_store
-            from src.llm import get_rag_chain
+            from src.llm import get_conversational_rag_chain, get_llm
+            from src.memory import get_conversation_memory, add_message as mem_add
 
             vector_store = load_vector_store()
             retriever = vector_store.as_retriever(search_kwargs={"k": fetch_k})
@@ -437,11 +467,12 @@ if question := st.chat_input(placeholder, disabled=not st.session_state.vector_s
                     retriever, model_name=reranker_model, top_n=top_k, fetch_k=fetch_k
                 )
 
-            rag_chain = get_rag_chain(retriever)
+            memory = get_conversation_memory(SESSION_ID, get_llm())
+            rag_chain = get_conversational_rag_chain(retriever, memory)
 
-            response = rag_chain.invoke({"input": question})
+            response = rag_chain.invoke({"question": question})
             answer = response["answer"]
-            source_docs = response.get("context", [])
+            source_docs = response.get("source_documents", [])
 
             st.markdown(answer)
 
@@ -502,4 +533,9 @@ if question := st.chat_input(placeholder, disabled=not st.session_state.vector_s
         "images": image_paths,
         "image_descs": image_descs,
     })
+
+    # 持久化到 SQLite
+    mem_add(SESSION_ID, "user", question)
+    mem_add(SESSION_ID, "assistant", answer)
+
     st.rerun()
